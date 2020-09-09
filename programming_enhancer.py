@@ -2,7 +2,7 @@ import pyautogui
 import sys
 import random
 
-#use gloves for stronger effect
+#use gloves for stronger effect 
 
 try:
     set_range = 1000
@@ -15,7 +15,7 @@ try:
         pyautogui.PAUSE = y
         print(y*2)
 
-        #
+        
 
 
     print("done")
