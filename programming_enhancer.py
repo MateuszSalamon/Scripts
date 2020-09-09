@@ -2,7 +2,7 @@ import pyautogui
 import sys
 import random
 
-
+#use gloves for stronger effect
 
 try:
     set_range = 1000
