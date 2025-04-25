@@ -21,7 +21,10 @@ for x in range(0, set_range):
     pyautogui.PAUSE = time
     full += time
     #tm.strftime('%H:%M:%S', tm.gmtime(time))
-    print(x, time, full, tm.strftime('%H:%M:%S', tm.gmtime(full)))
+    hr = int(full/3600)
+    mn = int(full%3600/60)
+    sc = int(full%60)
+    print(x, time, full, tm.strftime('%H:%M:%S', tm.gmtime(full)), f'{hr:02d}:{mn:02d}:{sc:02d}')
 
     #
 
