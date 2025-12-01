@@ -186,11 +186,11 @@ class SimGui:
                     dpg.add_input_text(tag=f'it_name_{index}', width=self.__TAB_W_NAME - 10, default_value=str(row.get('name', '')), readonly=True)
                     dpg.add_input_text(tag=f'it_id_{index}', width=self.__TAB_W_ID - 10, default_value=str(row.get('id', '')), readonly=True)
                     dpg.add_input_text(tag=f'it_payload_{index}', width=self.__TAB_W_PAYLOAD - 10, default_value=str(row.get('payload', '')), readonly=True)
-                    dpg.add_button(label=' ... ', tag=f'btn_modify_{index}', callback=lambda s, a, i=index: self.__btn_modify_msg_clbk(s, {'index': i, 'source_checkbox': False}))
-                    dpg.add_button(label='  x  ', tag=f'btn_del_{index}', callback=lambda s, a, i=index: self.__btn_del_msg_clbk(s, i))
-                    dpg.add_checkbox(tag=f'it_period_en_{index}', callback=lambda s, a, i=index: self.__btn_modify_msg_clbk(s, {'index': i, 'source_checkbox': True}))
+                    dpg.add_button(label=' ... ', tag=f'btn_modify_{index}', callback=self.__btn_modify_msg_clbk, user_data={'index': index, 'source_checkbox': False})
+                    dpg.add_button(label='  x  ', tag=f'btn_del_{index}', callback=self.__btn_del_msg_clbk, user_data=index)
+                    dpg.add_checkbox(tag=f'it_period_en_{index}', callback=self.__btn_modify_msg_clbk, user_data={'index': index, 'source_checkbox': True})
                     dpg.set_value(f'it_period_en_{index}', bool(row.get('period_en', False)))
-                    dpg.add_button(label='  >  ', tag=f'btn_send_{index}', callback=lambda s, a, i=index: self.__btn_send_clbk(s, i))
+                    dpg.add_button(label='  >  ', tag=f'btn_send_{index}', callback=self.__btn_send_clbk, user_data=index)
 
         dpg.add_separator(parent='PyCANSimMain')
 
@@ -241,17 +241,17 @@ class SimGui:
             if callable(self.__add_msg_h) and self.__add_msg_h(name=name, msg_id=msg_id, payload=payload):
                 self.__update_msg_table()
 
-    def __btn_del_msg_clbk(self, sender: str, index: int) -> None:
+    def __btn_del_msg_clbk(self, sender: str, app_data: Any, user_data: int) -> None:
         """ Callback for delete message buttons """
-        self.__delete_msg_h(index=index)
+        self.__delete_msg_h(index=user_data)
         self.__update_msg_table()
 
-    def __btn_modify_msg_clbk(self, sender: str, data: Dict[str, Any]) -> None:
+    def __btn_modify_msg_clbk(self, sender: str, app_data: Any, user_data: Dict[str, Any]) -> None:
         """ Callback for modify message buttons """
-        print(f"Modify callback: sender={sender}, data={data}")
+        print(f"Modify callback: sender={sender}, user_data={user_data}")
 
         """ Check if this is first step for modification - clicked modify button """
-        btn_tag = f'btn_modify_{data["index"]}'
+        btn_tag = f'btn_modify_{user_data["index"]}'
 
         # Check configuration to determine state
         config = dpg.get_item_configuration(btn_tag)
@@ -262,33 +262,33 @@ class SimGui:
         is_editing = (current_label == ' /ok ')
         print(f"Is editing: {is_editing}")
 
-        if not is_editing and not data['source_checkbox']:
+        if not is_editing and not user_data['source_checkbox']:
             print("Entering edit mode")
             """ Clicked modify button - enable editing"""
-            dpg.configure_item(f'it_name_{data["index"]}', readonly=False)
-            dpg.configure_item(f'it_id_{data["index"]}', readonly=False)
-            dpg.configure_item(f'it_payload_{data["index"]}', readonly=False)
+            dpg.configure_item(f'it_name_{user_data["index"]}', readonly=False)
+            dpg.configure_item(f'it_id_{user_data["index"]}', readonly=False)
+            dpg.configure_item(f'it_payload_{user_data["index"]}', readonly=False)
             dpg.configure_item(btn_tag, label=' /ok ')
         else:
             print("Saving changes")
             """ Save updated values """
-            name = dpg.get_value(f'it_name_{data["index"]}') if dpg.does_item_exist(f'it_name_{data["index"]}') else ''
-            msg_id = dpg.get_value(f'it_id_{data["index"]}') if dpg.does_item_exist(f'it_id_{data["index"]}') else ''
-            payload = dpg.get_value(f'it_payload_{data["index"]}') if dpg.does_item_exist(f'it_payload_{data["index"]}') else ''
-            period_en = dpg.get_value(f'it_period_en_{data["index"]}') if dpg.does_item_exist(f'it_period_en_{data["index"]}') else False
+            name = dpg.get_value(f'it_name_{user_data["index"]}') if dpg.does_item_exist(f'it_name_{user_data["index"]}') else ''
+            msg_id = dpg.get_value(f'it_id_{user_data["index"]}') if dpg.does_item_exist(f'it_id_{user_data["index"]}') else ''
+            payload = dpg.get_value(f'it_payload_{user_data["index"]}') if dpg.does_item_exist(f'it_payload_{user_data["index"]}') else ''
+            period_en = dpg.get_value(f'it_period_en_{user_data["index"]}') if dpg.does_item_exist(f'it_period_en_{user_data["index"]}') else False
 
             print(f"Values to save: name='{name}', id='{msg_id}', payload='{payload}', period_en={period_en}")
 
-            if callable(self.__modify_msg_h) and self.__modify_msg_h(index=data['index'], name=name, msg_id=msg_id, payload=payload, period_en=period_en):
+            if callable(self.__modify_msg_h) and self.__modify_msg_h(index=user_data['index'], name=name, msg_id=msg_id, payload=payload, period_en=period_en):
                 print("Update successful")
                 self.__update_msg_table()
             else:
                 print("Update failed")
                 """ Provided message is invalid """
                 pass
-    def __btn_send_clbk(self, sender: str, index: int):
+    def __btn_send_clbk(self, sender: str, app_data: Any, user_data: int):
         """ Callback for send message buttons """
-        self.__send_msg_trig_h(index=index)
+        self.__send_msg_trig_h(index=user_data)
 
     def on_exit(self):
         print("GUI closing")
