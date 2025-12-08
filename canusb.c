@@ -3,8 +3,8 @@
 Purpose of this file is to change sample configuration to have non standard baudrate and to specific payloads informing about furnace ignition status
 ./canusb -t -d /dev/ttyUSB0 -s 1000000 -i 1 -j BEE -g 200 -z 2
 ./canusb -t -d /dev/ttyUSB0 -s 1000000 -i 1 -j BEE -g 200 -z 0
+./canusb will work as ignition on
 */
-
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,7 +37,6 @@ typedef enum {
   CANUSB_SPEED_20000   = 0x0a,
   CANUSB_SPEED_10000   = 0x0b,
   CANUSB_SPEED_5000    = 0x0c,
-  CANUSB_SPEED_666666  = 0x0d,
 } CANUSB_SPEED;
 
 typedef enum {
@@ -76,8 +75,6 @@ static CANUSB_SPEED canusb_int_to_speed(int speed)
     return CANUSB_SPEED_1000000;
   case 800000:
     return CANUSB_SPEED_800000;
-  case 666666:
-    return CANUSB_SPEED_666666;
   case 500000:
     return CANUSB_SPEED_500000;
   case 400000:
@@ -279,7 +276,7 @@ static int command_settings(int tty_fd, CANUSB_SPEED speed, CANUSB_MODE mode, CA
   cmd_frame[cmd_frame_len++] = 0x55;
   cmd_frame[cmd_frame_len++] = 0x13;
   cmd_frame[cmd_frame_len++] = 0x01;
-  cmd_frame[cmd_frame_len++] = 0x02; //extended frame == 0x02, normal frame == 0x01
+  cmd_frame[cmd_frame_len++] = frame; //extended frame == 0x02, normal frame == 0x01
   cmd_frame[cmd_frame_len++] = 0; /* Filter ID not handled. */
   cmd_frame[cmd_frame_len++] = 0; /* Filter ID not handled. */
   cmd_frame[cmd_frame_len++] = 0; /* Filter ID not handled. */
@@ -305,9 +302,9 @@ static int command_settings(int tty_fd, CANUSB_SPEED speed, CANUSB_MODE mode, CA
 
 
 
-static int send_data_frame(int tty_fd, CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
+static int send_data_frame(int tty_fd, CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char id_arr[4] , unsigned char data[], int data_length_code)
 {
-#define MAX_FRAME_SIZE 13
+#define MAX_FRAME_SIZE 15
   int data_frame_len = 0;
   unsigned char data_frame[MAX_FRAME_SIZE] = {0x00};
 
@@ -332,8 +329,18 @@ static int send_data_frame(int tty_fd, CANUSB_FRAME frame, unsigned char id_lsb,
   data_frame_len++;
 
   /* Byte 2 to 3: ID */
-  data_frame[data_frame_len++] = id_lsb; /* lsb */
-  data_frame[data_frame_len++] = id_msb; /* msb */
+  if (frame == CANUSB_FRAME_STANDARD)
+  {
+    data_frame[data_frame_len++] = id_lsb; /* lsb */
+    data_frame[data_frame_len++] = id_msb; /* msb */
+  }
+  else
+  {
+    data_frame[data_frame_len++] = id_arr[3];
+    data_frame[data_frame_len++] = id_arr[2];
+    data_frame[data_frame_len++] = id_arr[1];
+    data_frame[data_frame_len++] = id_arr[0];
+  }
 
   /* Byte 4 to (4+data_len): Data */
   for (int i = 0; i < data_length_code; i++)
@@ -463,7 +470,8 @@ static int convert_from_hex(const char *hex_string, unsigned char *bin_string, i
         bin_string[n2] = hex_value(high) * 16 + hex_value(hex_string[n1]);
         n2++;
         if (n2 >= bin_string_len) {
-          printf("hex string truncated to %d bytes\n", n2);
+          //printf("hex string truncated to %d bytes\n", n2);
+          /*when palyoad is 8 bytes this is always true then there is no point in printing*/
           break;
         }
         high = -1;
@@ -482,6 +490,7 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
   int data_len;
   unsigned char binary_data[8];
   unsigned char binary_id_lsb = 0, binary_id_msb = 0;
+  unsigned char binary_id[4];
   struct timespec gap_ts;
   struct timeval now;
   int error = 0;
@@ -499,6 +508,12 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
     return -1;
   }
 
+  if (strlen(hex_id) > 8)
+  {
+    fprintf(stderr, "Frame ID cannot be larger than 8 characters!\n");
+    return -1;
+  }
+
   switch (strlen(hex_id)) {
   case 1:
     binary_id_lsb = hex_value(hex_id[0]);
@@ -513,8 +528,20 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
     binary_id_lsb = (hex_value(hex_id[1]) * 16) + hex_value(hex_id[2]);
     break;
 
+  case 8:
+    /*For Extended frames*/
+    //for(int i = 0; i < strlen(hex_id); i++){fprintf(stderr, "c--> %x\n", hex_value(hex_id[i]));}
+
+    int i = 0;
+    for (int j = 0; j < 4; j++)
+    {
+      binary_id[j] = (hex_value(hex_id[i]) * 16) + hex_value(hex_id[++i]);
+      i++;
+    }
+    break;
+
   default:
-    fprintf(stderr, "Unable to convert ID from hex to binary!\n");
+    fprintf(stderr, "Unable to convert ID from hex to binary strlen(hex_id): %lx !\n", strlen(hex_id));
     return -1;
   }
 
@@ -535,7 +562,7 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
         binary_data[i]++;
     }
 
-    //error = send_data_frame(tty_fd, CANUSB_FRAME_STANDARD, binary_id_lsb, binary_id_msb, binary_data, data_len);
+    // //error = send_data_frame(tty_fd, CANUSB_FRAME_EXTENDED, binary_id_lsb, binary_id_msb, binary_data, data_len);
     if(ignition_mode == 2)
     {
       error = send_data_frame_ignition_on(tty_fd);
@@ -546,7 +573,14 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
     }
     else
     {
-      error = send_data_frame_ignition_on(tty_fd);
+      if(strlen(hex_id) == 8)
+      {
+        error = send_data_frame(tty_fd, CANUSB_FRAME_EXTENDED, binary_id_lsb, binary_id_msb, binary_id, binary_data, data_len);
+      }
+      else
+      {
+        error = send_data_frame(tty_fd, CANUSB_FRAME_STANDARD, binary_id_lsb, binary_id_msb, binary_id, binary_data, data_len);
+      }
     }
   }
 
@@ -652,8 +686,7 @@ static void display_help(const char *progname)
      "  -n COUNT    Terminate after COUNT frames (default: infinite).\n"
      "  -g MS       Inject sleep gap in MS milliseconds (default: %d ms).\n"
      "  -m MODE     Inject payload MODE (%d = random, %d = incremental, %d = fixed).\n"
-     "  -z MODE     Ignition ON\n"
-     "  -x MODE     Ignition OFF\n"
+     "  -z MODE     Ignition 2 - ON, 0 - OFF, default - user must inject data payload\n"
      "\n",
      CANUSB_TTY_BAUD_RATE_DEFAULT,
      CANUSB_INJECT_SLEEP_GAP_DEFAULT,
@@ -674,14 +707,18 @@ static void sigterm(int signo)
 int main(int argc, char *argv[])
 {
   int c, tty_fd;
-  char *tty_device = NULL, *inject_data = NULL, *inject_id = NULL;
-  CANUSB_SPEED speed = 0;
+  //char *tty_device = NULL, *inject_data = NULL, *inject_id = NULL;
+  char *tty_device = "/dev/ttyUSB0", *inject_data = "F2FFFFFFFFB9FF19", *inject_id = "10FF0021";
+  int any_arg_set = 0;
+  int can_mode = 0x2;
+  CANUSB_SPEED speed = CANUSB_SPEED_500000; /*default CAN baud rate*/
   int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
 
-  while ((c = getopt(argc, argv, "htd:s:b:i:j:n:g:m:z:x:")) != -1) {
+  while ((c = getopt(argc, argv, "htd:s:b:i:j:n:g:m:z:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
+      any_arg_set |= 1<<0;
       return EXIT_SUCCESS;
 
     case 't':
@@ -690,42 +727,47 @@ int main(int argc, char *argv[])
 
     case 'd':
       tty_device = optarg;
+      any_arg_set |= 1<<1;
       break;
 
     case 's':
       speed = canusb_int_to_speed(atoi(optarg));
+      any_arg_set |= 1<<2;
       break;
 
     case 'b':
       baudrate = atoi(optarg);
+      any_arg_set |= 1<<3;
       break;
 
     case 'i':
       inject_id = optarg;
+      any_arg_set |= 1<<4;
       break;
 
     case 'j':
       inject_data = optarg;
+      any_arg_set |= 1<<5;
       break;
 
     case 'n':
       terminate_after = atoi(optarg);
+      any_arg_set |= 1<<6;
       break;
 
     case 'g':
       inject_sleep_gap = strtof(optarg, NULL);
+      any_arg_set |= 1<<7;
       break;
 
     case 'm':
       inject_payload_mode = atoi(optarg);
+      any_arg_set |= 1<<8;
       break;
 
     case 'z':
       ignition_mode = atoi(optarg);
-      break;
-
-    case 'x':
-      ignition_mode = atoi(optarg);
+      any_arg_set |= 1<<8;
       break;
 
     case '?':
@@ -751,34 +793,26 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
+  if(any_arg_set == 0)
+  {
+    fprintf(stderr, "Ignition ON by default, no arg set\n");
+  }
+  // else
+  // {
+  //   fprintf(stderr, "Argument set: ");
+  //   for(int i = 0; i < 32; i++)
+  //   {
+  //     fprintf(stderr, "%x", (any_arg_set&1));
+  //   }
+  //   fprintf(stderr, "\n");
+  // }
+
   tty_fd = adapter_init(tty_device, baudrate);
   if (tty_fd == -1) {
     return EXIT_FAILURE;
   }
 
   command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_EXTENDED);
-
-  // if(ignition_mode == 2)
-  // {
-  //   if (send_data_frame_ignition_on(tty_fd) == -1) {
-  //       return EXIT_FAILURE;
-  //     } else {
-  //       return EXIT_SUCCESS;
-  //     }
-
-  // }
-  // else if(ignition_mode == 0)
-  // {
-  //   if (send_data_frame_ignition_off(tty_fd) == -1) {
-  //       return EXIT_FAILURE;
-  //     } else {
-  //       return EXIT_SUCCESS;
-  //     }
-  // }
-  // else
-  // {
-  //   /*do nothing*/
-  // }
 
   if (inject_data == NULL) {
     /* Dumping mode (default). */
@@ -801,3 +835,5 @@ int main(int argc, char *argv[])
 
   return EXIT_SUCCESS;
 }
+
+
