@@ -54,7 +54,7 @@ void feedMeUBX_NAV_ATT(PYR_values pyr)
     }
 }
 
-void feedMeUBX_NAV_ATT(Vector3 raw)
+void feedMeUBX_ESF_MEAS(Vector3 raw)
 {
     g_sensor_data.x = raw.x;
     g_sensor_data.y = raw.y;
@@ -63,12 +63,13 @@ void feedMeUBX_NAV_ATT(Vector3 raw)
 
 void verify_UBX_ESF_STATUS(void)
 {
-    
+
 }
 
 // Usage with UBX-NAV-ATT data
 void processUbloxAttitude(int32_t raw_roll, int32_t raw_pitch, int32_t raw_heading) {
-    const double DEG_TO_RAD = M_PI / 180.0;
+    // const double DEG_TO_RAD = M_PI / 180.0;
+    const double DEG_TO_RAD = 3.14159265358979323846 / 180.0;
     const double SCALE = 1e-5;
 
     double roll  = (raw_roll * SCALE) * DEG_TO_RAD;
@@ -76,33 +77,33 @@ void processUbloxAttitude(int32_t raw_roll, int32_t raw_pitch, int32_t raw_headi
     double yaw   = (raw_heading * SCALE) * DEG_TO_RAD;
 
     //Quaternion orientation = toQuaternion(roll, pitch, yaw);
-    orientation = toQuaternion(roll, pitch, yaw);
-    
-    std::cout << "Quaternion: w=" << orientation.w << " x=" << orientation.x <<" y="<<orientation.y<<" z="<<orientation.z<< std::endl;
+    g_orientation = toQuaternion(roll, pitch, yaw);
+
+    std::cout << "Quaternion: w=" << g_orientation.w << " x=" << g_orientation.x <<" y="<<g_orientation.y<<" z="<<g_orientation.z<< std::endl;
 }
 
 // Function to isolate true linear acceleration
 Vector3 getLinearAcceleration(const Quaternion& q, const Vector3& raw_accel) {
     // 1. Define standard gravity (assuming raw_accel is in m/s^2)
     // If your raw_accel is in "g"s, set this to 1.0 instead.
-    const double G = 9.80665; 
-    
+    const double G = 9.80665;
+
     // 2. Calculate the expected gravity vector in the sensor's local frame
     Vector3 expected_gravity;
     expected_gravity.x = 2.0 * (q.x * q.z - q.w * q.y) * G;
     expected_gravity.y = 2.0 * (q.y * q.z + q.w * q.x) * G;
     expected_gravity.z = (q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z) * G;
-    
+
     // 3. Remove gravity from the raw accelerometer reading
     Vector3 linear_accel;
-    
+
     // NOTE: Depending on how u-blox outputs raw Z (positive or negative at rest),
-    // you may need to ADD expected_gravity instead of subtracting. 
+    // you may need to ADD expected_gravity instead of subtracting.
     // Test this by leaving the device flat and motionless; linear_accel should be near [0, 0, 0].
     linear_accel.x = raw_accel.x - expected_gravity.x;
     linear_accel.y = raw_accel.y - expected_gravity.y;
     linear_accel.z = raw_accel.z - expected_gravity.z;
-    
+
     return linear_accel;
 }
 
@@ -113,14 +114,14 @@ int main() {
     Vector3 raw_sensor_data = {-9.81, 7.2, 2.0};            // Feeling 1g on X
 
     //This is an example of UBX_NAV_ATT PYR and accuracy
-    PYR_values pyr {.roll = 2.1, .pitch = 3.2, .yaw = 4.3, .accuracyRoll = 0.41, .accuracyPitch = 0.72, .accuracyYaw = 0.5}
-    
+    PYR_values pyr = {2.1, 3.2,  4.3, 0.41, 0.72, 0.5};
+
     //use a sideeffect for now
     feedMeUBX_NAV_ATT(pyr);
 
     //use a sideeffect for now
     feedMeUBX_ESF_MEAS(raw_sensor_data);
-    
+
     //Vector3 pure_motion = getLinearAcceleration(my_orientation, raw_sensor_data);
     Vector3 pure_motion = getLinearAcceleration(g_orientation, g_sensor_data);
 
