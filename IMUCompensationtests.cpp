@@ -1,9 +1,7 @@
 //IMUCompensation
 
 #include <iostream>
-
 #include <cmath>
-#include <iostream>
 
 struct Quaternion {
     double w, x, y, z;
