@@ -2,6 +2,45 @@
 
 #include <iostream>
 #include <cmath>
+#include <cstdint>
+
+struct IMUData { double x, y, z; };
+
+class IMUBiasRemover {
+private:
+    IMUData gyro_bias = {0, 0, 0};
+    IMUData accel_bias = {0, 0, 0};
+
+    // Learning rate
+    const double alpha = 0.01;
+    const double static_speed_threshold = 0.05; // m/s (from UBX-NAV-PVT)
+
+public:
+    // Call this every time you get a UBX-NAV-PVT and UBX-ESF-MEAS pair
+    void update(const IMUData& raw_gyro, const IMUData& raw_accel_no_gravity, double current_speed) {
+        if (current_speed < static_speed_threshold) {
+            // Update Bias using a low pass filter only when stationaty
+            gyro_bias.x = (1.0 - alpha) * gyro_bias.x + alpha * raw_gyro.x;
+            gyro_bias.y = (1.0 - alpha) * gyro_bias.y + alpha * raw_gyro.y;
+            gyro_bias.z = (1.0 - alpha) * gyro_bias.z + alpha * raw_gyro.z;
+
+            // raw_accel_no_gravity is the result of the quaternion subtraction we did earlier
+            accel_bias.x = (1.0 - alpha) * accel_bias.x + alpha * raw_accel_no_gravity.x;
+            accel_bias.y = (1.0 - alpha) * accel_bias.y + alpha * raw_accel_no_gravity.y;
+            accel_bias.z = (1.0 - alpha) * accel_bias.z + alpha * raw_accel_no_gravity.z;
+        }
+    }
+
+    IMUData compensateGyro(const IMUData& raw) {
+        return {raw.x - gyro_bias.x, raw.y - gyro_bias.y, raw.z - gyro_bias.z};
+    }
+
+    IMUData compensateAccel(const IMUData& raw_no_gravity) {
+        return {raw_no_gravity.x - accel_bias.x,
+                raw_no_gravity.y - accel_bias.y,
+                raw_no_gravity.z - accel_bias.z};
+    }
+};
 
 struct Quaternion {
     double w, x, y, z;
@@ -61,16 +100,13 @@ void feedMeUBX_ESF_MEAS(Vector3 raw)
     g_sensor_data.z = raw.z;
 }
 
-void verify_UBX_ESF_STATUS(void)
-{
-
-}
 
 // Usage with UBX-NAV-ATT data
 void processUbloxAttitude(int32_t raw_roll, int32_t raw_pitch, int32_t raw_heading) {
     // const double DEG_TO_RAD = M_PI / 180.0;
     const double DEG_TO_RAD = 3.14159265358979323846 / 180.0;
-    const double SCALE = 1e-5;
+    // const double SCALE = 1e-5;
+    const double SCALE = 1;
 
     double roll  = (raw_roll * SCALE) * DEG_TO_RAD;
     double pitch = (raw_pitch * SCALE) * DEG_TO_RAD;
@@ -111,10 +147,11 @@ int main() {
     // Example: Device pitched up 90 degrees (standing on its tail)
     // In this state, gravity should fully act on the X-axis.
     Quaternion my_orientation = {0.7071, 0.0, 0.7071, 0.0}; // 90 deg pitch
-    Vector3 raw_sensor_data = {-9.81, 7.2, 2.0};            // Feeling 1g on X
+    Vector3 raw_sensor_data = {2.7, 5.2, 9.8};            // Feeling 1g on X
 
     //This is an example of UBX_NAV_ATT PYR and accuracy
-    PYR_values pyr = {2.1, 3.2,  4.3, 0.41, 0.72, 0.5};
+    PYR_values pyr = {2.1, 5.6,  4.3, 0.41, 0.6, 0.5};
+    raw_sensor_data = {2.7, 5.2, 9.8};            // Feeling 1g on Z
 
     //use a sideeffect for now
     feedMeUBX_NAV_ATT(pyr);
