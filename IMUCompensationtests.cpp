@@ -16,7 +16,8 @@ struct PYR_values
   double roll,pitch,yaw, accuracyRoll, accuracyPitch, accuracyYaw;
 };
 
-Quaternion orientation;
+Quaternion g_orientation;
+Vector3 g_sensor_data;
 
 void processUbloxAttitude(int32_t raw_roll, int32_t raw_pitch, int32_t raw_heading);
 
@@ -45,7 +46,24 @@ z = \cos(\phi/2)\cos(\theta/2)\sin(\psi/2) - \sin(\phi/2)\sin(\theta/2)\cos(\psi
 
 void feedMeUBX_NAV_ATT(PYR_values pyr)
 {
-  processUbloxAttitude(pyr.roll, pyr.pitch, pyr.yaw);
+    //loose accuracy
+    //float comparison
+    if((pyr.accuracyRoll < 2.2) && (pyr.accuracyPitch < 2.2) && (pyr.accuracyYaw < 2.2))
+    {
+        processUbloxAttitude(pyr.roll, pyr.pitch, pyr.yaw);
+    }
+}
+
+void feedMeUBX_NAV_ATT(Vector3 raw)
+{
+    g_sensor_data.x = raw.x;
+    g_sensor_data.y = raw.y;
+    g_sensor_data.z = raw.z;
+}
+
+void verify_UBX_ESF_STATUS(void)
+{
+    
 }
 
 // Usage with UBX-NAV-ATT data
@@ -92,12 +110,19 @@ int main() {
     // Example: Device pitched up 90 degrees (standing on its tail)
     // In this state, gravity should fully act on the X-axis.
     Quaternion my_orientation = {0.7071, 0.0, 0.7071, 0.0}; // 90 deg pitch
-    Vector3 raw_sensor_data = {-9.81, 5.1, 2.0};            // Feeling 1g on X
+    Vector3 raw_sensor_data = {-9.81, 7.2, 2.0};            // Feeling 1g on X
+
+    //This is an example of UBX_NAV_ATT PYR and accuracy
     PYR_values pyr {.roll = 2.1, .pitch = 3.2, .yaw = 4.3, .accuracyRoll = 0.41, .accuracyPitch = 0.72, .accuracyYaw = 0.5}
-    feedMeUBX_NAV_ATT(pyr);
+    
     //use a sideeffect for now
+    feedMeUBX_NAV_ATT(pyr);
+
+    //use a sideeffect for now
+    feedMeUBX_ESF_MEAS(raw_sensor_data);
+    
     //Vector3 pure_motion = getLinearAcceleration(my_orientation, raw_sensor_data);
-    Vector3 pure_motion = getLinearAcceleration(orientation, raw_sensor_data);
+    Vector3 pure_motion = getLinearAcceleration(g_orientation, g_sensor_data);
 
     std::cout << "Linear Accel X: " << pure_motion.x << "\n";
     std::cout << "Linear Accel Y: " << pure_motion.y << "\n";
