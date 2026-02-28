@@ -62,7 +62,7 @@ void processUbloxAttitude(int32_t raw_roll, int32_t raw_pitch, int32_t raw_headi
     //Quaternion orientation = toQuaternion(roll, pitch, yaw);
     orientation = toQuaternion(roll, pitch, yaw);
     
-    std::cout << "Quaternion: w=" << orientation.w << " x=" << orientation.x << std::endl;
+    std::cout << "Quaternion: w=" << orientation.w << " x=" << orientation.x <<" y="<<orientation.y<<" z="<<orientation.z<< std::endl;
 }
 
 // Function to isolate true linear acceleration
@@ -95,8 +95,11 @@ int main() {
     // In this state, gravity should fully act on the X-axis.
     Quaternion my_orientation = {0.7071, 0.0, 0.7071, 0.0}; // 90 deg pitch
     Vector3 raw_sensor_data = {-9.81, 5.1, 2.0};            // Feeling 1g on X
-
-    Vector3 pure_motion = getLinearAcceleration(my_orientation, raw_sensor_data);
+    PYR_values pyr {.roll = 2.1, .pitch = 3.2, .yaw = 4.3, .accuracyRoll = 0.41, .accuracyPitch = 0.72, .accuracyYaw = 0.5}
+    feedMeUBX_NAV_ATT(pyr);
+    //use a sideeffect for now
+    //Vector3 pure_motion = getLinearAcceleration(my_orientation, raw_sensor_data);
+    Vector3 pure_motion = getLinearAcceleration(orientation, raw_sensor_data);
 
     std::cout << "Linear Accel X: " << pure_motion.x << "\n";
     std::cout << "Linear Accel Y: " << pure_motion.y << "\n";
