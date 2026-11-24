@@ -1,0 +1,19 @@
+rm() {
+    local args=()
+    for arg in "$@"; do
+        case "$arg" in
+            -rf|-fr|-Rf|-fR)
+                args+=("-ir")
+                ;;
+            -f|--force)
+                args+=("-i")
+                ;;
+            *)
+                args+=("$arg")
+                ;;
+        esac
+    done
+    command rm "${args[@]}"
+}
+
+#replace all rm -rf with rm -i*
